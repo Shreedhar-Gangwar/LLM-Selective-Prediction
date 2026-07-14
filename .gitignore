@@ -1,0 +1,13 @@
+# Virtualenv
+.venv/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# banking77 CSVs — fetched from the canonical upstream source, see SETUP.md
+data/*.csv
+
+# Cached model outputs: regenerable GPU artifacts, keyed by (example_id, params)
+cache/
