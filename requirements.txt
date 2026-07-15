@@ -11,6 +11,7 @@ bitsandbytes>=0.43        # 4-bit quantization (Linux / WSL2)
 numpy>=1.26
 pandas>=2.0
 scikit-learn>=1.3
+scipy>=1.11              # exact binomial tail for the RCPS calibration
 matplotlib>=3.8
 
 # Serving
