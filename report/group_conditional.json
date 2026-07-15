@@ -1,0 +1,88 @@
+{
+  "alpha": 0.1,
+  "delta": 0.1,
+  "signal": "logprob_margin",
+  "tau_marginal": 0.07976054618110806,
+  "groups": [
+    {
+      "group": "account_other",
+      "n_test": 70,
+      "marginal_coverage": 0.9857142857142858,
+      "marginal_accuracy": 1.0,
+      "gc_controlled": true,
+      "gc_tau": 0.2686917636057795,
+      "gc_coverage": 0.9857142857142858,
+      "gc_accuracy": 1.0
+    },
+    {
+      "group": "cards",
+      "n_test": 231,
+      "marginal_coverage": 0.9653679653679653,
+      "marginal_accuracy": 0.9282511210762332,
+      "gc_controlled": true,
+      "gc_tau": 0.39644161669104094,
+      "gc_coverage": 0.7792207792207793,
+      "gc_accuracy": 0.9833333333333333
+    },
+    {
+      "group": "cash_atm",
+      "n_test": 92,
+      "marginal_coverage": 0.967391304347826,
+      "marginal_accuracy": 0.9438202247191011,
+      "gc_controlled": true,
+      "gc_tau": 0.17056280249564323,
+      "gc_coverage": 0.9130434782608695,
+      "gc_accuracy": 0.9761904761904762
+    },
+    {
+      "group": "fx",
+      "n_test": 79,
+      "marginal_coverage": 0.9493670886075949,
+      "marginal_accuracy": 0.9333333333333333,
+      "gc_controlled": true,
+      "gc_tau": 0.1990089543442354,
+      "gc_coverage": 0.8734177215189873,
+      "gc_accuracy": 0.9420289855072463
+    },
+    {
+      "group": "identity_security",
+      "n_test": 127,
+      "marginal_coverage": 0.9448818897637795,
+      "marginal_accuracy": 0.9333333333333333,
+      "gc_controlled": true,
+      "gc_tau": 0.4005581093792029,
+      "gc_coverage": 0.7559055118110236,
+      "gc_accuracy": 0.9895833333333334
+    },
+    {
+      "group": "payments",
+      "n_test": 129,
+      "marginal_coverage": 0.9457364341085271,
+      "marginal_accuracy": 0.9590163934426229,
+      "gc_controlled": true,
+      "gc_tau": 0.435484453627593,
+      "gc_coverage": 0.7441860465116279,
+      "gc_accuracy": 1.0
+    },
+    {
+      "group": "top_up",
+      "n_test": 121,
+      "marginal_coverage": 0.9173553719008265,
+      "marginal_accuracy": 0.9369369369369369,
+      "gc_controlled": false,
+      "gc_tau": null,
+      "gc_coverage": null,
+      "gc_accuracy": null
+    },
+    {
+      "group": "transfers",
+      "n_test": 151,
+      "marginal_coverage": 0.9205298013245033,
+      "marginal_accuracy": 0.8561151079136691,
+      "gc_controlled": true,
+      "gc_tau": 0.2839923183220657,
+      "gc_coverage": 0.7284768211920529,
+      "gc_accuracy": 0.9272727272727272
+    }
+  ]
+}

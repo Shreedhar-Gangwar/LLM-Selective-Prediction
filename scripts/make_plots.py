@@ -131,11 +131,71 @@ def plot_reliability(n_bins: int = 10) -> None:
     plt.close(fig)
 
 
+def plot_group_conditional() -> None:
+    """Per-group accepted accuracy under one marginal threshold vs per-group thresholds.
+
+    The story: pooling hides the `transfers` group below the 90% target; a per-group
+    threshold restores it. Bars are accuracy; the coverage cost is in the report table.
+    """
+    path = REPORT_DIR / "group_conditional.json"
+    if not path.exists():
+        return
+    data = json.loads(path.read_text())
+    target = (1 - data["alpha"]) * 100
+    recs = sorted(data["groups"], key=lambda r: (r["marginal_accuracy"] or 0))
+    names = [r["group"].replace("_", " ") for r in recs]
+    x = np.arange(len(recs))
+    w = 0.38
+
+    m_acc = [(r["marginal_accuracy"] or 0) * 100 for r in recs]
+    g_acc = [(r["gc_accuracy"] * 100 if r["gc_accuracy"] is not None else None) for r in recs]
+
+    fig, ax = plt.subplots(figsize=(9.2, 5.0))
+    ax.bar(x - w / 2, m_acc, w, color="#BBBBBB", label="one marginal threshold")
+    for xi, v in zip(x, g_acc):
+        if v is None:  # group-conditional abstains on everything (insufficient data)
+            ax.bar(xi + w / 2, target, w, color="none", edgecolor="#999",
+                   hatch="//", lw=1)
+            ax.annotate("abstains", (xi + w / 2, target + 0.4), ha="center",
+                        fontsize=6.5, color="#777", rotation=90, va="bottom")
+        else:
+            ax.bar(xi + w / 2, v, w, color=COLORS["logprob_margin"],
+                   label="per-group threshold" if xi == 0 else None)
+
+    ax.axhline(target, color="#D55E00", lw=1.5, ls="--", zorder=5)
+    ax.annotate(f"{target:.0f}% target", xy=(len(recs) - 0.4, target + 0.3),
+                fontsize=8.5, color="#D55E00", ha="right", va="bottom")
+    # call out the group pooling hid
+    bad = next((i for i, r in enumerate(recs) if r["group"] == "transfers"), None)
+    if bad is not None:
+        ax.annotate("pooling hid this\nfailure", xy=(bad - w / 2, m_acc[bad]),
+                    xytext=(bad - 0.1, 82.5), fontsize=8, color=INK, ha="center",
+                    arrowprops=dict(arrowstyle="->", color=INK, lw=1))
+
+    ax.set_xticks(x)
+    ax.set_xticklabels(names, rotation=25, ha="right", fontsize=8.5)
+    ax.set_ylabel("Accepted accuracy on test (%)")
+    ax.set_title("Group-conditional calibration restores subgroups the marginal one hides",
+                 fontsize=11.5, color=INK)
+    ax.set_ylim(80, 101)
+    ax.grid(True, axis="y", color=GRID, lw=0.6)
+    ax.set_axisbelow(True)
+    for s in ("top", "right"):
+        ax.spines[s].set_visible(False)
+    ax.legend(loc="lower right", fontsize=9, frameon=True, framealpha=0.9,
+              facecolor="white", edgecolor="none")
+    fig.tight_layout()
+    fig.savefig(REPORT_DIR / "group_conditional.png", dpi=150)
+    plt.close(fig)
+
+
 def main() -> int:
     REPORT_DIR.mkdir(exist_ok=True)
     plot_risk_coverage()
     plot_reliability()
-    print(f"wrote {REPORT_DIR}/risk_coverage.png and reliability_logprob.png")
+    plot_group_conditional()
+    print(f"wrote {REPORT_DIR}/risk_coverage.png, reliability_logprob.png, "
+          f"group_conditional.png")
     return 0
 
 

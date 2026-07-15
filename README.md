@@ -62,6 +62,9 @@ the calibration method, and every caveat — is in **[report/findings.md](report
   Test (RCPS family): with probability ≥90%, accepted accuracy ≥ target, assuming
   exchangeability. Distribution-free and finite-sample — no reliance on the score being a
   calibrated probability (it isn't; it's under-confident, which is why we calibrate).
+- **Group-conditional coverage.** The marginal guarantee is shown to *hide* a subgroup
+  failure (the `transfers` intents sit below target while the pooled number clears it);
+  per-group calibration restores it, at a measured coverage cost. See §5 of the findings.
 - **Runs on a laptop.** RTX 4060 Mobile, 8 GB VRAM. 4-bit NF4, full GPU offload, KV-cache
   reuse for label scoring.
 
@@ -82,6 +85,7 @@ python -m scripts.phase1_accuracy    # raw accuracy + the no-LLM baseline
 python -m scripts.phase2_signals --split calibration --n 1000   # GPU: compute signals
 python -m scripts.phase2_signals --split test        --n 1000
 python -m scripts.phase3_calibrate   # calibrate the threshold, emit report artifacts
+python -m scripts.phase5_group_conditional   # group-conditional coverage (stretch)
 python -m scripts.make_plots         # the figures in report/
 
 python -m src.evaluate               # raw / accepted accuracy / coverage from cache
@@ -128,6 +132,7 @@ src/
   model.py       4-bit load; length-normalized label scoring + sampling primitives
   signals.py     the three confidence signals
   conformal.py   Learn-then-Test calibration + risk-coverage curves  ← the core
+  groups.py      intent grouping for the group-conditional guarantee
   evaluate.py    batch harness (from cache, no GPU)
   serve.py       FastAPI classify-or-abstain endpoint
 scripts/         env check, smoke test, the phase-by-phase pipeline, plotting

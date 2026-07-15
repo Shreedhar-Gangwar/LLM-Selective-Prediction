@@ -154,13 +154,40 @@ accuracy, and route the hard 1-in-5 to a human, with a calibrated guarantee behi
 
 ---
 
+## 5. Group-conditional coverage (stretch)
+
+The guarantee above is **marginal** — it controls accepted error *pooled over all 77
+intents*. Pooling can hide a subgroup. Grouping the intents into 8 functional areas (cards,
+transfers, payments, top-up, cash/ATM, FX, identity/security, account — see `src/groups.py`)
+and re-examining the marginal threshold at a 90% target exposes exactly that:
+
+![Group-conditional calibration](group_conditional.png)
+
+- Under **one marginal threshold**, the pooled accepted accuracy clears 90%, but the
+  **`transfers` group sits at 85.6% — well below target.** The marginal guarantee said
+  nothing about it.
+- **Group-conditional calibration** — a separate Learn-then-Test threshold per group,
+  calibrated on that group's own calibration data — gives `transfers` a stricter threshold
+  that restores **92.7%** accepted accuracy (≥90%), at the honest cost of lower coverage
+  (72.8% vs 92.1%). It certifies **7 of 8 groups**; `top_up` abstains because its per-group
+  data can't certify a threshold better than accept-all.
+
+**The finite-sample cost of subgroup guarantees is data.** At the stricter 95% target,
+**0 of 8 groups** are per-group certifiable with ~150 calibration examples each — there
+simply aren't enough per-group labels to certify 95% distribution-free. This is the real
+lesson: a group-conditional guarantee is stronger than a marginal one, but you pay for it
+in calibration data proportional to the number of groups. The mechanism is here and works
+at 90%; reaching 95% per group would need a larger calibration split.
+
+---
+
 ## Assumptions and limits
 
 - **Exchangeability.** The guarantee assumes calibration and test are drawn from the same
   distribution. Real support traffic drifts; the threshold should be re-calibrated on fresh
   labelled data periodically.
-- **Marginal, not per-class.** The guarantee is over all intents pooled. Rare intents could
-  still fail while the marginal holds — a group-conditional guarantee is the natural next
-  step.
-- **n = 1000 per split.** Larger calibration data would tighten the conservativeness and let
-  stronger targets (≥98%) become certifiable.
+- **Marginal, not per-class — quantified in §5.** The headline guarantee is over all intents
+  pooled, and §5 shows it hides a real subgroup failure (`transfers`). Group-conditional
+  calibration fixes it at the 90% target but needs more per-group data to reach 95%.
+- **n = 1000 per split.** Larger calibration data would tighten the conservativeness, let
+  stronger targets (≥98%) become certifiable marginally, and make 95% achievable per group.
