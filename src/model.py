@@ -209,6 +209,43 @@ class LabelScorer:
         self-consistency). Returns the raw decoded string — parsing/matching to a
         canonical intent is the caller's job."""
         prompt = build_prompt(self.tok, text, nl_labels, shots)
+        return self._generate(prompt, n=1, temperature=temperature,
+                              max_new_tokens=max_new_tokens, seed=seed)[0]
+
+    @torch.no_grad()
+    def sample_labels(
+        self,
+        text: str,
+        nl_labels: list[str],
+        k: int,
+        temperature: float,
+        seed: int,
+        max_new_tokens: int = 16,
+        shots: list[tuple[str, str]] | None = None,
+    ) -> list[str]:
+        """Draw k label samples at temperature > 0 for the self-consistency signal.
+
+        All k are produced in one `generate` call (num_return_sequences=k), so the prompt
+        is encoded once rather than k times. Seeded, so the samples reproduce.
+        """
+        prompt = build_prompt(self.tok, text, nl_labels, shots)
+        return self._generate(prompt, n=k, temperature=temperature,
+                              max_new_tokens=max_new_tokens, seed=seed)
+
+    @torch.no_grad()
+    def generate_from_prompt(
+        self, prompt: str, max_new_tokens: int = 24, seed: int | None = None
+    ) -> str:
+        """Greedy generation from an already-built prompt (used by the verbalized signal,
+        which needs its own instruction). Returns the raw decoded continuation."""
+        return self._generate(prompt, n=1, temperature=0.0,
+                              max_new_tokens=max_new_tokens, seed=seed)[0]
+
+    @torch.no_grad()
+    def _generate(
+        self, prompt: str, n: int, temperature: float, max_new_tokens: int, seed: int | None
+    ) -> list[str]:
+        """Low-level generation: n sequences from one prompt. Returns decoded strings."""
         enc = self.tok(prompt, return_tensors="pt").to(self.model.device)
         if seed is not None:
             torch.manual_seed(seed)
@@ -217,8 +254,8 @@ class LabelScorer:
             max_new_tokens=max_new_tokens,
             do_sample=temperature > 0,
             temperature=temperature if temperature > 0 else None,
+            num_return_sequences=n,
             pad_token_id=self.pad_id,
         )
-        return self.tok.decode(
-            out[0, enc.input_ids.shape[1] :], skip_special_tokens=True
-        ).strip()
+        start = enc.input_ids.shape[1]
+        return [self.tok.decode(row[start:], skip_special_tokens=True).strip() for row in out]
