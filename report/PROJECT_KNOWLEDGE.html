@@ -324,6 +324,20 @@ like I&rsquo;m not technical,&rdquo; these are your answers.</p>
   parameters &mdash; small as modern LLMs go, which is exactly why it fits on a laptop.</p>
 </div>
 
+<div class="callout hood">
+  <span class="clabel">Under the hood &middot; Why this exact model</span>
+  <p>Qwen2.5-3B-Instruct wasn&rsquo;t picked at random. It is <b>natively implemented inside
+  the <code>transformers</code> library</b> &mdash; its model code ships with the library, so
+  it can&rsquo;t drift out of sync. The first choice, Phi-4-mini-instruct, relied on
+  <b><code>trust_remote_code</code></b> (model code downloaded from the hub and executed),
+  and that bundled code <em>broke twice</em> across library versions &mdash; first an import
+  error, then a generation-shape error. Switching to a natively-supported model removed a whole
+  class of fragility. And a <em>slightly weaker</em> 3B model is a feature, not a bug here: it
+  produces a richer accept/abstain trade-off than a near-perfect classifier would. The
+  uncertainty layer on top is model-agnostic &mdash; swap in a stronger model and the same
+  machinery applies unchanged.</p>
+</div>
+
 <h3>4-bit quantization &mdash; making a big model fit in a small memory</h3>
 <div class="callout plain">
   <span class="clabel">In plain English &middot; Quantization</span>
@@ -695,6 +709,35 @@ also checked at other targets; every certified case held its promise on the test
   why we calibrate a threshold from data rather than trusting the raw number.</figcaption>
 </figure>
 
+<h3>Why not just fix the probabilities directly?</h3>
+<p>A natural objection: the reliability diagram shows the confidence is a bad probability, so
+why not <em>repair</em> the probability and threshold that? There is a whole family of
+<b>post-hoc calibration</b> methods that do exactly this.</p>
+
+<div class="callout plain">
+  <span class="clabel">In plain English &middot; Temperature / Platt / isotonic scaling</span>
+  <p>These are recipes that take a model&rsquo;s miscalibrated confidence numbers and
+  <em>re-shape</em> them so they mean what they say. <b>Temperature scaling</b> divides the
+  scores by one learned number to soften or sharpen them. <b>Platt scaling</b> fits a little
+  logistic curve mapping raw score &rarr; true probability. <b>Isotonic regression</b> fits a
+  flexible staircase that only has to go uphill. All three learn their fix on held-out data,
+  and all three would genuinely make our 0.35 mean &ldquo;~0.35 correct.&rdquo;</p>
+</div>
+
+<div class="callout hood">
+  <span class="clabel">Under the hood &middot; Why they&rsquo;re not enough here</span>
+  <p>They give you a <em>better-looking number</em>, not a <em>guarantee</em>. If you
+  temperature-scale the softmax and then accept everything above 0.95, you still have no
+  finite-sample promise that the accepted set is 95% accurate on future tickets &mdash; you&rsquo;ve
+  only reshaped the score, and the reshaping itself is estimated from finite data with its own
+  error. Conformal / Learn-then-Test is <b>orthogonal and stronger</b>: it makes a
+  distribution-free, finite-sample promise about the <em>error rate of the accepted set</em>,
+  and it needs only the score&rsquo;s <em>ranking</em>, not its numeric calibration. The two
+  even compose: you could Platt-scale first for interpretable numbers, then conformalize for the
+  guarantee. But the guarantee is the thing only conformal provides &mdash; which is why it,
+  not scaling, is the heart of the project.</p>
+</div>
+
 <!-- ============================================================= -->
 <h2 id="p4"><span class="pill phase">Phase 4</span> Serving it as a real service</h2>
 
@@ -721,6 +764,39 @@ returns a decision. It was smoke-tested live &mdash; these are real responses:</
 (0.05, far below the 0.347 threshold) and is correctly <em>routed to a human</em> instead of
 guessed. Phase 4 also produced the batch evaluator, the figures you see here, and two written
 documents &mdash; a plain-English README and a rigorous findings report.</p>
+
+<h3>Production realities &mdash; latency, throughput, and operation</h3>
+<p>A portfolio project should be honest about what it would take to run for real.</p>
+
+<div class="callout hood">
+  <span class="clabel">Under the hood &middot; Where the time goes</span>
+  <p>Each ticket costs roughly <b>1.5&ndash;2 seconds</b> on the laptop GPU. That time is
+  dominated by <b>scoring the 77 candidate labels</b> &mdash; even with the KV-cache trick,
+  that&rsquo;s the bottleneck. Retrieval is milliseconds (TF-IDF is cheap), and the model loads
+  <em>once</em> at startup (~2 minutes) and is reused. So this is a good fit for
+  <b>asynchronous triage</b> &mdash; routing a ticket within a couple of seconds &mdash; not
+  for sub-100&nbsp;ms real-time autocomplete.</p>
+</div>
+
+<div class="callout plain">
+  <span class="clabel">In plain English &middot; How you&rsquo;d make it faster</span>
+  <p>Four honest levers: <b>batch</b> several tickets through the GPU together to amortize
+  cost; <b>prune the candidate labels</b> &mdash; use the retriever to score only the ~10
+  plausible intents instead of all 77; use a <b>bigger GPU</b> (this was deliberately built on
+  an 8&nbsp;GB laptop); or <b>distil</b> the classifier into something lighter. The uncertainty
+  layer is unaffected by any of these &mdash; it operates on whatever confidence scores come
+  out.</p>
+</div>
+
+<div class="callout plain">
+  <span class="clabel">In plain English &middot; Operating it over time</span>
+  <p>You freeze the threshold and then <b>watch for drift</b>. Concretely: monitor the
+  distribution of confidence scores and the realized coverage on live traffic; if they move,
+  that&rsquo;s a signal the world has shifted and the exchangeability assumption is weakening.
+  When it does, <b>re-calibrate</b> on a fresh batch of labelled tickets. The guarantee is only
+  as current as the calibration data behind it &mdash; and saying so plainly is part of the
+  professionalism.</p>
+</div>
 
 <!-- ============================================================= -->
 <h2 id="p5"><span class="pill phase">Phase 5</span> Where the guarantee hides failures</h2>
@@ -822,6 +898,14 @@ say it: direct, honest, and showing you understand the <em>why</em>.</p>
   low-risk end of my threshold range has no statistical power (few accepted points), which
   makes sequential testing stall. Bonferroni sidesteps that and is easy to verify. A tighter
   valid procedure exists and would recover some coverage.</p>
+  <p class="q">Why not temperature-scale or Platt-calibrate the softmax and threshold that?</p>
+  <p class="a">Because post-hoc scaling gives me a better-looking <em>number</em>, not a
+  <em>guarantee</em>. Temperature/Platt/isotonic reshape the scores so 0.9 means 90% &mdash;
+  useful, and they&rsquo;d fix my under-confidence &mdash; but thresholding a calibrated
+  probability at 0.95 still carries no finite-sample promise that the accepted set is 95%
+  accurate on future data. Conformal is orthogonal and stronger: it controls the accepted-set
+  error rate directly, distribution-free, using only the score&rsquo;s ranking. You can even
+  compose them &mdash; scale for interpretable numbers, then conformalize for the promise.</p>
 </div>
 
 <h4>On the model &amp; data</h4>
@@ -848,6 +932,13 @@ say it: direct, honest, and showing you understand the <em>why</em>.</p>
   <p class="a">No &mdash; the retrieval index is built <em>only</em> from the few-shot pool,
   which is disjoint from both calibration and test. A test ticket can never retrieve itself or
   anything from the evaluation sets. Split hygiene was a design rule from day one.</p>
+  <p class="q">Why Qwen2.5-3B specifically, and not some other small model?</p>
+  <p class="a">Because it&rsquo;s natively implemented in the <code>transformers</code>
+  library &mdash; its model code ships with the library and can&rsquo;t desync from it. My
+  first pick, Phi-4-mini, relied on downloaded-and-executed <code>trust_remote_code</code>,
+  and that code broke twice across library versions. Removing that dependency removed a whole
+  class of reproducibility risk. It also pins cleanly to a commit hash. The choice was about
+  engineering robustness, not leaderboard rank.</p>
 </div>
 
 <h4>On honesty &amp; judgement</h4>
@@ -886,6 +977,29 @@ say it: direct, honest, and showing you understand the <em>why</em>.</p>
   decision is what made the Phase 1 bake-off cheap and fast.</p>
 </div>
 
+<h4>On production</h4>
+<div class="callout grill">
+  <span class="clabel">Interview grilling</span>
+  <p class="q">What&rsquo;s the latency, and is this real-time?</p>
+  <p class="a">About 1.5&ndash;2 seconds per ticket on the laptop GPU, dominated by scoring the
+  77 candidate labels &mdash; retrieval is milliseconds and the model loads once at startup.
+  So it&rsquo;s built for asynchronous triage, routing within a couple of seconds, not
+  sub-100&nbsp;ms real-time. To speed it up I&rsquo;d batch tickets, prune candidates via the
+  retriever so I score ~10 labels not 77, move off the 8&nbsp;GB laptop, or distil the
+  classifier. The uncertainty layer is unaffected by any of that.</p>
+  <p class="q">How would you run and maintain this in production over months?</p>
+  <p class="a">Freeze the threshold, then monitor for drift: track the live distribution of
+  confidence scores and the realized coverage. If they move, the exchangeability assumption is
+  weakening &mdash; a new product, changed customer mix &mdash; and I re-calibrate on a fresh
+  batch of labelled tickets. The guarantee is only as current as its calibration data, so
+  scheduled re-calibration plus drift alerts is the operational contract.</p>
+  <p class="q">What happens to the abstained 20% &mdash; is that just cost?</p>
+  <p class="a">It&rsquo;s cost avoided, not cost created: those tickets would have gone to a
+  human anyway in a no-automation world. The lever is business-tunable &mdash; tighten the
+  target and you automate less but with higher accuracy; loosen it and you automate more. The
+  risk-coverage curve is literally the menu the business chooses its operating point from.</p>
+</div>
+
 <!-- ============================================================= -->
 <div class="partline"><span class="pn">Part VI</span><span class="pr"></span></div>
 <h2 id="glossary">Glossary &mdash; quick reference</h2>
@@ -921,6 +1035,12 @@ say it: direct, honest, and showing you understand the <em>why</em>.</p>
     <tr><td>Operating point</td><td>the one chosen threshold on that curve</td></tr>
     <tr><td>Marginal guarantee</td><td>holds on average over all classes pooled</td></tr>
     <tr><td>Group-conditional</td><td>holds within each subgroup separately</td></tr>
+    <tr><td>Post-hoc calibration</td><td>reshaping confidence numbers so they mean what they say</td></tr>
+    <tr><td>Temperature scaling</td><td>dividing scores by one learned number to fix calibration</td></tr>
+    <tr><td>Platt / isotonic</td><td>fitting a curve/staircase from raw score to true probability</td></tr>
+    <tr><td>Latency</td><td>time to answer one ticket (~1.5&ndash;2s here; 77-label scoring dominates)</td></tr>
+    <tr><td>Drift</td><td>the world changing so calibration data no longer matches live traffic</td></tr>
+    <tr><td>trust_remote_code</td><td>running model code downloaded from the hub &mdash; a fragility we avoided</td></tr>
   </tbody>
 </table></div>
 
