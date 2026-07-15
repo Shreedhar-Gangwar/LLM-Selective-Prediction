@@ -1,0 +1,12 @@
+{
+  "signal": "logprob_margin",
+  "tau": 0.3473203877484415,
+  "alpha": 0.05,
+  "delta": 0.1,
+  "target_accepted_accuracy": 0.95,
+  "calibrated_on": "calibration split (n=1000)",
+  "test_coverage": 0.802,
+  "test_accepted_accuracy": 0.9812967581047382,
+  "test_base_accuracy": 0.902,
+  "note": "Calibrated with Learn-then-Test on the calibration split and frozen. Guarantee: accepted accuracy >= target w.p. >= 1-delta under exchangeability."
+}

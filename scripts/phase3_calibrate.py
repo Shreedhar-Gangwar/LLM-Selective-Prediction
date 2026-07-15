@@ -27,6 +27,8 @@ from src.conformal import (
     risk_coverage_curve,
 )
 
+REPORT_DIR = Path(__file__).resolve().parent.parent / "report"
+
 DELTA = 0.10          # the guarantee holds w.p. >= 1 - DELTA over the calibration draw
 ALPHAS = [0.10, 0.05, 0.02]   # target accepted-error: >=90%, >=95%, >=98% accuracy
 PRIMARY = "logprob_margin"
@@ -99,7 +101,30 @@ def main() -> int:
           f"(down from 100% with no automation).")
     print("=" * 78)
 
-    # -- emit risk-coverage curves for the Phase 4 plots -------------------------
+    # -- emit committed report artifacts -----------------------------------------
+    REPORT_DIR.mkdir(exist_ok=True)
+
+    # 1) the frozen operating point serve.py / evaluate.py consume
+    op = ltt_threshold(cal_scores[PRIMARY], cal_correct, HEADLINE_ALPHA, DELTA)
+    cov, acc, n, k = evaluate_threshold(test_scores[PRIMARY], test_correct, op.tau)
+    operating_point = {
+        "signal": PRIMARY,
+        "tau": op.tau,
+        "alpha": HEADLINE_ALPHA,
+        "delta": DELTA,
+        "target_accepted_accuracy": 1 - HEADLINE_ALPHA,
+        "calibrated_on": "calibration split (n=1000)",
+        "test_coverage": cov,
+        "test_accepted_accuracy": acc,
+        "test_base_accuracy": float(test_correct.mean()),
+        "note": (
+            "Calibrated with Learn-then-Test on the calibration split and frozen. "
+            "Guarantee: accepted accuracy >= target w.p. >= 1-delta under exchangeability."
+        ),
+    }
+    (REPORT_DIR / "operating_point.json").write_text(json.dumps(operating_point, indent=2))
+
+    # 2) risk-coverage curves (test) for the plots
     curves = {}
     for field, name in SIGNALS:
         rc = risk_coverage_curve(test_scores[field], test_correct)
@@ -108,9 +133,10 @@ def main() -> int:
             "coverage": rc.coverage.tolist(),
             "selective_accuracy": rc.selective_accuracy.tolist(),
         }
-    out = CACHE_DIR / "phase3_curves.json"
-    out.write_text(json.dumps({"delta": DELTA, "alphas": ALPHAS, "curves": curves}))
-    print(f"\nrisk-coverage curves (test) -> {out}")
+    (REPORT_DIR / "risk_coverage.json").write_text(
+        json.dumps({"delta": DELTA, "alphas": ALPHAS, "curves": curves})
+    )
+    print(f"\nreport artifacts -> {REPORT_DIR}/operating_point.json, risk_coverage.json")
     return 0
 
 
